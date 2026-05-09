@@ -67,6 +67,7 @@ def generate_with_claude(word: str) -> dict:
 คำศัพท์: {word}
 
 JSON fields ที่ต้องการ:
+- word_reading: การอ่านของคำศัพท์นี้เป็นภาษาฮิรางานะ (เฉพาะตัวคำ ไม่ใช่ประโยค เช่น べんきょう)
 - thai_meaning: ความหมายภาษาไทย กระชับ 1-3 ความหมาย
 - english_meaning: ความหมายภาษาอังกฤษ กระชับ 1-3 ความหมาย
 - sentence: ประโยคตัวอย่างภาษาญี่ปุ่น ระดับ N3-N4 เป็นธรรมชาติ
@@ -304,22 +305,19 @@ def api_generate():
     try:
         result = generate_with_claude(word)
 
-        # Pitch accent SVG — use reading from Claude's output
-        reading = result.get("sentence_furigana", "") or word
-        # Extract plain reading from furigana format (strip [xxx] brackets)
-        import re
-        plain_reading = re.sub(r'\[.*?\]', '', reading)
-        # Try looking up the word directly first, then fall back to plain reading
-        pitch_html = build_pitch_field(word, plain_reading)
+        # Use word_reading (hiragana of the word itself) for pitch + audio lookup
+        word_reading = result.get("word_reading", "").strip()
+
+        pitch_html = build_pitch_field(word, word_reading)
         result["pitch_accents"] = pitch_html
         result["has_pitch"] = bool(pitch_html)
 
-        # Audio
-        audio_result = fetch_word_audio(word, plain_reading)
+        audio_result = fetch_word_audio(word, word_reading)
         if audio_result:
+            import base64
             filename, audio_bytes = audio_result
             result["audio_file"] = filename
-            result["audio_b64"] = __import__("base64").b64encode(audio_bytes).decode()
+            result["audio_b64"] = base64.b64encode(audio_bytes).decode()
             result["has_audio"] = True
         else:
             result["has_audio"] = False
@@ -381,16 +379,13 @@ def export():
     tmp_files  = []   # temp audio files to clean up after
 
     for w in words:
-        # Write audio to a temp file so genanki can include it
+        # Write audio with exact original filename so [sound:xxx.mp3] matches
         audio_field = ""
         if w["audio_data"] and w["audio_file"]:
-            tmp = tempfile.NamedTemporaryFile(
-                suffix=".mp3", prefix=w["audio_file"].replace(".mp3", "_"),
-                delete=False
-            )
-            tmp.write(bytes(w["audio_data"]))
-            tmp.close()
-            tmp_files.append((tmp.name, w["audio_file"]))
+            audio_path = os.path.join(tempfile.gettempdir(), w["audio_file"])
+            with open(audio_path, "wb") as f:
+                f.write(bytes(w["audio_data"]))
+            tmp_files.append(audio_path)
             audio_field = f"[sound:{w['audio_file']}]"
 
         deck.add_note(genanki.Note(
@@ -413,11 +408,10 @@ def export():
 
     out = f"/tmp/nihongo_{int(time.time())}.apkg"
     pkg = genanki.Package(deck)
-    pkg.media_files = [t[0] for t in tmp_files]
+    pkg.media_files = tmp_files
     pkg.write_to_file(out)
 
-    # Clean up temp audio files
-    for tmp_path, _ in tmp_files:
+    for tmp_path in tmp_files:
         try:
             os.unlink(tmp_path)
         except OSError:
