@@ -43,6 +43,9 @@ def init_db():
         """)
 
 
+init_db()
+
+
 def generate_with_claude(word: str) -> dict:
     client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
     prompt = f"""คุณเป็นผู้เชี่ยวชาญภาษาญี่ปุ่น กรุณา generate ข้อมูลสำหรับคำศัพท์ต่อไปนี้แล้วตอบเป็น JSON เท่านั้น
