@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Nihongo">
+<title>🇯🇵 Nihongo Vocab</title>
+<style>
+:root {
+  --red:    #e63946;
+  --red-dk: #c1121f;
+  --green:  #2d6a4f;
+  --blue:   #1d3557;
+  --bg:     #f4f4f4;
+  --card:   #ffffff;
+  --border: #e0e0e0;
+  --sub:    #888;
+  --text:   #1a1a1a;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,'Hiragino Sans','Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100dvh}
+
+/* Header */
+header{background:var(--red);color:#fff;padding:14px 18px;font-size:1.05rem;font-weight:700;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+
+.wrap{max-width:600px;margin:0 auto;padding:16px 14px}
+
+/* Flash */
+.flash{border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:.88rem}
+.flash.error{background:#ffe0e0;color:var(--red-dk)}
+
+/* Card */
+.card{background:var(--card);border-radius:16px;padding:20px;margin-bottom:16px;box-shadow:0 1px 5px rgba(0,0,0,.08)}
+.card h2{font-size:.78rem;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.07em;margin-bottom:14px}
+
+/* Input row */
+.input-row{display:flex;gap:10px}
+.input-row input{flex:1;border:1.5px solid var(--border);border-radius:12px;padding:13px 15px;font-size:1.4rem;font-family:inherit;outline:none;transition:border-color .2s;background:#fafafa;min-width:0}
+.input-row input:focus{border-color:var(--red);background:#fff}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:13px 18px;border:none;border-radius:12px;font-size:.95rem;font-weight:700;cursor:pointer;transition:background .15s,transform .1s;text-decoration:none;white-space:nowrap}
+.btn:active{transform:scale(.96)}
+.btn-red{background:var(--red);color:#fff}
+.btn-red:hover{background:var(--red-dk)}
+.btn-red:disabled{background:#ccc;cursor:not-allowed;transform:none}
+.btn-full{width:100%;margin-top:10px}
+.btn-export{background:#264653;color:#fff;width:100%;margin-bottom:16px}
+.btn-export:hover{background:#1a2f3a}
+
+/* Preview */
+#preview{display:none}
+.preview-card{background:linear-gradient(135deg,#fff9f0,#fff);border:2px solid #ffd166;border-radius:16px;padding:20px;margin-bottom:12px}
+.preview-word{font-size:2rem;font-weight:700;text-align:center;margin-bottom:6px;color:var(--blue)}
+.preview-divider{border:none;border-top:1px solid #ffd166;margin:12px 0}
+.preview-reading{font-size:.95rem;color:var(--sub);text-align:center;margin-bottom:10px}
+.preview-meaning-th{font-size:1.2rem;color:var(--red-dk);font-weight:600;margin:6px 0}
+.preview-meaning-en{font-size:.9rem;color:#555;margin:4px 0}
+.preview-sentence{font-size:1rem;margin:10px 0 4px;line-height:1.6}
+.preview-sentence-th{font-size:.88rem;color:var(--green);margin:0}
+.preview-sentence-en{font-size:.82rem;color:var(--sub);margin:2px 0;font-style:italic}
+
+.edit-toggle{font-size:.8rem;color:var(--sub);cursor:pointer;text-decoration:underline;margin-bottom:8px;display:inline-block}
+#edit-fields{display:none}
+.field{margin-bottom:10px}
+.field label{display:block;font-size:.75rem;font-weight:600;color:var(--sub);margin-bottom:4px}
+.field input,.field textarea{width:100%;border:1.5px solid var(--border);border-radius:10px;padding:9px 12px;font-size:.9rem;font-family:inherit;outline:none;background:#fafafa}
+.field input:focus,.field textarea:focus{border-color:var(--red);background:#fff}
+.field textarea{resize:vertical;min-height:54px}
+.field .jp{font-size:1rem}
+
+/* Spinner */
+.spinner{display:inline-block;width:18px;height:18px;border:2.5px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Word list */
+.section-label{font-size:.75rem;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;display:flex;align-items:center;gap:7px}
+.badge{background:var(--red);color:#fff;border-radius:999px;font-size:.68rem;padding:2px 8px}
+
+.word-item{background:var(--card);border-radius:12px;padding:13px 15px;margin-bottom:9px;box-shadow:0 1px 4px rgba(0,0,0,.07);display:flex;align-items:flex-start;gap:10px}
+.word-item .body{flex:1;min-width:0}
+.word-item .kana{font-size:.75rem;color:var(--sub);margin-bottom:2px}
+.word-item .kanji{font-size:1.2rem;font-weight:700;margin-bottom:3px}
+.word-item .th{font-size:.88rem;color:#444}
+.word-item .sentence{font-size:.78rem;color:var(--sub);margin-top:3px;font-style:italic}
+.word-item .ts{font-size:.7rem;color:#bbb;margin-top:5px}
+.word-item.done{opacity:.5}
+.word-item.done .kanji{font-size:1rem}
+
+.btn-del{background:none;border:none;color:#ccc;font-size:1.1rem;cursor:pointer;padding:3px;line-height:1;flex-shrink:0}
+.btn-del:hover{color:var(--red)}
+
+.empty{text-align:center;color:var(--sub);padding:18px;font-size:.88rem}
+
+/* Toast */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:#333;color:#fff;padding:10px 20px;border-radius:999px;font-size:.88rem;opacity:0;transition:all .3s;pointer-events:none;z-index:999;white-space:nowrap}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<header>🇯🇵 Nihongo Vocab</header>
+
+<div class="wrap">
+
+{% for msg, cat in get_flashed_messages(with_categories=true) %}
+  <div class="flash {{ cat }}">{{ msg }}</div>
+{% endfor %}
+
+<!-- ── Add word ── -->
+<div class="card">
+  <h2>เพิ่มคำศัพท์</h2>
+  <div class="input-row">
+    <input id="word-input" type="text" placeholder="พิมพ์คำศัพท์ญี่ปุ่น…" autocomplete="off" autocorrect="off" spellcheck="false">
+    <button class="btn btn-red" id="gen-btn" onclick="generate()">Generate</button>
+  </div>
+</div>
+
+<!-- ── Preview ── -->
+<div id="preview">
+  <div class="preview-card">
+    <div class="preview-word" id="pv-word"></div>
+    <hr class="preview-divider">
+    <div class="preview-meaning-th" id="pv-th"></div>
+    <div class="preview-meaning-en" id="pv-en"></div>
+    <div class="preview-sentence" id="pv-sent"></div>
+    <div class="preview-sentence-th" id="pv-sent-th"></div>
+    <div class="preview-sentence-en" id="pv-sent-en"></div>
+  </div>
+
+  <span class="edit-toggle" onclick="toggleEdit()">✏️ แก้ไขก่อนบันทึก</span>
+
+  <div id="edit-fields">
+    <div class="field"><label>ความหมาย TH</label>
+      <input type="text" id="e-th"></div>
+    <div class="field"><label>ความหมาย EN</label>
+      <input type="text" id="e-en"></div>
+    <div class="field"><label>ประโยคตัวอย่าง JP</label>
+      <textarea id="e-sent" class="jp"></textarea></div>
+    <div class="field"><label>ประโยค + furigana (Anki)</label>
+      <textarea id="e-furi" class="jp"></textarea></div>
+    <div class="field"><label>คำแปลประโยค TH</label>
+      <textarea id="e-sent-th"></textarea></div>
+    <div class="field"><label>คำแปลประโยค EN</label>
+      <textarea id="e-sent-en"></textarea></div>
+  </div>
+
+  <button class="btn btn-red btn-full" onclick="saveWord()">✅ บันทึกลง Anki</button>
+</div>
+
+<!-- ── Export ── -->
+{% if pending %}
+<a href="/export" class="btn btn-export">⬇ Export {{ pending|length }} คำ → .apkg</a>
+{% endif %}
+
+<!-- ── Pending ── -->
+<div class="section-label">รอ Export <span class="badge">{{ pending|length }}</span></div>
+{% if pending %}
+  {% for w in pending %}
+  <div class="word-item">
+    <div class="body">
+      <div class="kanji">{{ w.expression }}</div>
+      <div class="th">🇹🇭 {{ w.thai_meaning }}</div>
+      {% if w.sentence %}<div class="sentence">{{ w.sentence }}</div>{% endif %}
+      <div class="ts">{{ w.created_at }}</div>
+    </div>
+    <form method="POST" action="/delete/{{ w.id }}" onsubmit="return confirm('ลบ「{{ w.expression }}」?')">
+      <button type="submit" class="btn-del">✕</button>
+    </form>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">ยังไม่มีคำศัพท์ที่รอ export</div>
+{% endif %}
+
+<!-- ── Exported ── -->
+{% if exported %}
+<div class="section-label" style="margin-top:24px">Export แล้ว (20 ล่าสุด)</div>
+{% for w in exported %}
+  <div class="word-item done">
+    <div class="body">
+      <div class="kanji">{{ w.expression }}</div>
+      <div class="th">{{ w.thai_meaning }}</div>
+    </div>
+  </div>
+{% endfor %}
+{% endif %}
+
+</div><!-- /wrap -->
+
+<div id="toast"></div>
+
+<script>
+let _data = {};
+
+function showToast(msg, dur=2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), dur);
+}
+
+async function generate() {
+  const word = document.getElementById('word-input').value.trim();
+  if (!word) { showToast('กรุณาพิมพ์คำศัพท์ก่อน'); return; }
+
+  const btn = document.getElementById('gen-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  document.getElementById('preview').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/generate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({word})
+    });
+    const d = await res.json();
+    if (d.error) { showToast('❌ ' + d.error, 4000); return; }
+
+    _data = {...d, expression: word};
+    fillPreview();
+    document.getElementById('preview').style.display = 'block';
+    document.getElementById('preview').scrollIntoView({behavior:'smooth', block:'start'});
+  } catch(e) {
+    showToast('❌ เกิดข้อผิดพลาด: ' + e.message, 4000);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Generate';
+  }
+}
+
+function fillPreview() {
+  document.getElementById('pv-word').textContent    = _data.expression;
+  document.getElementById('pv-th').textContent      = '🇹🇭 ' + (_data.thai_meaning || '');
+  document.getElementById('pv-en').textContent      = '🇬🇧 ' + (_data.english_meaning || '');
+  document.getElementById('pv-sent').textContent    = _data.sentence || '';
+  document.getElementById('pv-sent-th').textContent = '🇹🇭 ' + (_data.thai_sentence || '');
+  document.getElementById('pv-sent-en').textContent = '🇬🇧 ' + (_data.english_sentence || '');
+
+  document.getElementById('e-th').value       = _data.thai_meaning || '';
+  document.getElementById('e-en').value       = _data.english_meaning || '';
+  document.getElementById('e-sent').value     = _data.sentence || '';
+  document.getElementById('e-furi').value     = _data.sentence_furigana || '';
+  document.getElementById('e-sent-th').value  = _data.thai_sentence || '';
+  document.getElementById('e-sent-en').value  = _data.english_sentence || '';
+}
+
+function toggleEdit() {
+  const el = document.getElementById('edit-fields');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function saveWord() {
+  const payload = {
+    expression:       _data.expression,
+    thai_meaning:     document.getElementById('e-th').value,
+    english_meaning:  document.getElementById('e-en').value,
+    sentence:         document.getElementById('e-sent').value,
+    sentence_furigana:document.getElementById('e-furi').value,
+    thai_sentence:    document.getElementById('e-sent-th').value,
+    english_sentence: document.getElementById('e-sent-en').value,
+  };
+
+  const res = await fetch('/save', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const d = await res.json();
+  if (d.ok) {
+    showToast('✅ บันทึก「' + payload.expression + '」เรียบร้อย');
+    document.getElementById('word-input').value = '';
+    document.getElementById('preview').style.display = 'none';
+    document.getElementById('edit-fields').style.display = 'none';
+    _data = {};
+    setTimeout(() => location.reload(), 1000);
+  } else {
+    showToast('❌ ' + (d.error || 'เกิดข้อผิดพลาด'), 3000);
+  }
+}
+
+// Enter key triggers generate
+document.getElementById('word-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') generate();
+});
+</script>
+</body>
+</html>
