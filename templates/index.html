@@ -121,6 +121,8 @@ header{background:var(--red);color:#fff;padding:14px 18px;font-size:1.05rem;font
 <div id="preview">
   <div class="preview-card">
     <div class="preview-word" id="pv-word"></div>
+    <div id="pv-pitch" style="margin:4px 0 8px;overflow-x:auto;text-align:center"></div>
+    <div id="pv-audio" style="font-size:.78rem;color:#888;margin-bottom:6px"></div>
     <hr class="preview-divider">
     <div class="preview-meaning-th" id="pv-th"></div>
     <div class="preview-meaning-en" id="pv-en"></div>
@@ -239,6 +241,16 @@ function fillPreview() {
   document.getElementById('pv-sent-th').textContent = '🇹🇭 ' + (_data.thai_sentence || '');
   document.getElementById('pv-sent-en').textContent = '🇬🇧 ' + (_data.english_sentence || '');
 
+  // Pitch accent SVG
+  const pitchEl = document.getElementById('pv-pitch');
+  pitchEl.innerHTML = _data.pitch_accents || '';
+  if (!_data.has_pitch) pitchEl.innerHTML = '<span style="color:#ccc;font-size:.75rem">ไม่พบข้อมูล pitch accent</span>';
+
+  // Audio indicator
+  const audioEl = document.getElementById('pv-audio');
+  audioEl.textContent = _data.has_audio ? '🔊 พบเสียงจาก NHK' : '🔇 ไม่พบเสียง';
+  audioEl.style.color = _data.has_audio ? '#2d6a4f' : '#ccc';
+
   document.getElementById('e-th').value       = _data.thai_meaning || '';
   document.getElementById('e-en').value       = _data.english_meaning || '';
   document.getElementById('e-sent').value     = _data.sentence || '';
@@ -261,6 +273,9 @@ async function saveWord() {
     sentence_furigana:document.getElementById('e-furi').value,
     thai_sentence:    document.getElementById('e-sent-th').value,
     english_sentence: document.getElementById('e-sent-en').value,
+    pitch_accents:    _data.pitch_accents || '',
+    audio_file:       _data.audio_file || '',
+    audio_b64:        _data.audio_b64 || '',
   };
 
   const res = await fetch('/save', {

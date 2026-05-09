@@ -2,9 +2,11 @@ import os
 import time
 import sqlite3
 import json
+import tempfile
 from flask import Flask, render_template, request, redirect, url_for, send_file, jsonify, flash
 import anthropic
 import genanki
+from pitch_audio import build_pitch_field, fetch_word_audio
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "nihongo-dev-secret")
@@ -37,10 +39,22 @@ def init_db():
                 sentence_furi    TEXT,
                 thai_sentence    TEXT,
                 english_sentence TEXT,
+                pitch_accents    TEXT DEFAULT '',
+                audio_file       TEXT DEFAULT '',
+                audio_data       BLOB,
                 exported         INTEGER DEFAULT 0,
                 created_at       TEXT DEFAULT (datetime('now','localtime'))
             )
         """)
+        # Migrate existing DB: add new columns if missing
+        existing = {r[1] for r in conn.execute("PRAGMA table_info(words)")}
+        for col, defn in [
+            ("pitch_accents", "TEXT DEFAULT ''"),
+            ("audio_file",    "TEXT DEFAULT ''"),
+            ("audio_data",    "BLOB"),
+        ]:
+            if col not in existing:
+                conn.execute(f"ALTER TABLE words ADD COLUMN {col} {defn}")
 
 
 init_db()
@@ -76,6 +90,172 @@ JSON fields ที่ต้องการ:
     return json.loads(text)
 
 
+_QFMT = """\
+<div class="bubble">
+
+<div id="HASH">
+    <span id="freq">
+        {{Lesson}}
+    </span>
+    <span id="freq">
+        Freq\t{{frequency}}
+    </span>
+</div>
+
+<br><br>
+<span class='japanese'>{{Expression}}</span>
+
+<hr><br><br><br>
+<div class="context">{{Sentence}}</div>
+
+<br><br><br>
+</div>"""
+
+_AFMT = """\
+<div class="bubble">
+
+<div id="HASH">
+    <span id="freq">
+        {{Lesson}}
+    </span>
+    <span id="freq">
+        Freq\t{{frequency}}
+    </span>
+</div>
+
+<div class=left>
+    <div id=freq>
+        {{Card Number}}
+    </div>
+</div>
+
+<div id='word'>{{pitch-accents}}</div>
+
+<div id="kanjiHover">
+    <span class='japanese'>{{Expression}}</span>
+
+<label class="pitchToggle">
+  <input type="checkbox">
+  <div class="pitch">
+    {{pitch-accent-positions}}
+    {{pitch-accent-graphs}}
+  </div>
+</label>
+
+<hr>
+
+<span class='english'>{{hint:❃}}</span>
+<div style='color:#e74c3c; font-size:22px; margin:6px 0;'>🇹🇭 {{Thai_Meaning}}</div>
+
+<div><br></div>
+
+<div class="context">{{furigana:Sentence-furigana-plain}}</div>
+
+<span class='english'>{{hint:❃❃}}</span>
+<div style='color:#27ae60; font-size:18px; margin:6px 0;'>🇹🇭 {{Thai_Sentence}}</div>
+
+</div>
+
+{{Word Audio}}
+{{Sentence Audio}}
+
+<br><br>
+
+</div>
+
+<script>
+  var elem = document.querySelector(".soundLink, .replaybutton");
+  if (elem) { elem.click(); }
+</script>
+
+<script src ="_kanjiHover.js"></script>"""
+
+_CSS = """\
+@font-face {
+  font-family: "NotoSerifJPLocal";
+  src: url("_NotoSerifJP.ttf");
+}
+@font-face {
+  font-family: TakaoPMincho;
+  src: url("_TakaoPMincho.ttf");
+}
+@font-face {
+  font-family: OpenSansLight;
+  src: url("_OpenSans-Light.ttf");
+}
+
+.card {
+  font-family: TakaoPMincho;
+  font-size: 40px;
+  text-align: center;
+  color: black;
+  margin: 20px auto;
+  padding: 0 20px;
+  max-width: 800px;
+  background:
+    linear-gradient(rgba(181,172,159,0.45),rgba(181,172,159,0.45)),
+    url("_wallpaper_manga_wall_black_1.jpg");
+  background-position: center;
+  background-attachment: fixed;
+}
+
+.bubble {
+  border: double blue;
+  border-radius: 10px;
+  padding: 10px;
+  background-color: white;
+  box-shadow: -20px 20px 0 rgba(0,0,0,0.4);
+}
+
+hr { margin-bottom: 0; }
+rt { font-size: 25px; }
+#pitchGraph { font-size: 2rem; }
+#word span { border-color: #fd5c5c !important; padding-top: 10px; }
+a { color: inherit !important; text-decoration: none; }
+b, strong { font-weight: normal; background-color: #A9D8FF; padding: 0 3px; margin: 0 3px; border-radius: 0; }
+u { text-decoration-line: underline; text-decoration-color: #e63946; text-decoration-thickness: 3px; text-underline-offset: 8px; }
+
+#freq { display: inline-block; margin: 8px 8px -10px; margin-top: 0.3rem; border: 1px solid grey; border-radius: 5px; padding: 4px; font-size: 0.9rem; }
+#HASH { display: flex; justify-content: space-between; }
+.left { text-align: left; }
+
+ul, ol { list-style: none; margin: 0; padding: 0; display: inline-block; }
+li { text-align: center; }
+#word li:not(:first-child) { display: none; }
+#pitchGraph li:not(:first-child) { display: none; }
+ol > li:not(:first-child) { display: none; }
+
+.pitch { font-size: 0.7em; cursor: pointer; transition: max-height 0.15s ease-out; }
+.pitchToggle { cursor: pointer; display: inline-block; pointer-events: none; }
+.pitchToggle input { display: none; }
+.pitch ol li:not(:first-child) { display: none; }
+.pitchToggle input:checked + .pitch ol li { display: list-item; }
+.pitchToggle:has(ol li:nth-child(2)) { pointer-events: auto; }
+
+.japanese { font-size: 80px; }
+.japanese-highlight { font-size: 50px; color: salmon; }
+.reading { font-size: 35px; }
+.english { font-size: 30px; font-family: OpenSansLight; color: #b000b0; }
+.context { font-size: 40px; }
+
+.soundLink { background: url("_sound-speaker-black.svg") no-repeat center; background-size: contain; width: 44px; height: 44px; display: inline-block; cursor: pointer; }
+.playImage { display: none; }
+
+.nightMode.card { color: #e0e0e0 !important; background: linear-gradient(rgba(10,10,18,0.50),rgba(10,10,18,0.50)), url("_wallpaper_manga_wall_black_1.jpg"); background-position: center; }
+.nightMode .bubble { background-color: #1E1E2E; }
+.nightMode b, .nightMode strong { background-color: #0F5ED2; }
+.nightMode .soundLink { background-image: url("_sound-speaker-white.svg"); }
+
+.android .card, .ios .card { background-color: #ffffff !important; background-image: none !important; }
+.android .bubble, .ios .bubble { background: none !important; border: none !important; box-shadow: none !important; padding: 5px; }
+.android .nightMode.card, .ios .nightMode.card { background-color: #1E1E2E !important; }
+.android .japanese, .ios .japanese { font-size: 60px; }
+.android .context, .ios .context { font-size: 35px; }
+.android rt, .ios rt { font-size: 0.55em; }
+.android .english, .ios .english { font-size: 24px; }
+.android u, .ios u { text-underline-offset: 3px; }"""
+
+
 def make_anki_model():
     return genanki.Model(
         ANKI_MODEL_ID,
@@ -98,13 +278,11 @@ def make_anki_model():
             {"name": "Thai_Sentence"},
         ],
         templates=[{
-            "name": "Recognition",
-            "qfmt": "{{Expression}}",
-            "afmt": """{{FrontSide}}<hr id="answer">
-<div style="font-size:1.1em">{{Thai_Meaning}}</div>
-<div style="margin-top:8px">{{furigana:Sentence-furigana-plain}}</div>
-<div style="color:#27ae60">{{Thai_Sentence}}</div>""",
+            "name": "English Translate",
+            "qfmt": _QFMT,
+            "afmt": _AFMT,
         }],
+        css=_CSS,
     )
 
 
@@ -124,7 +302,29 @@ def api_generate():
     if not word:
         return jsonify({"error": "กรุณากรอกคำศัพท์"}), 400
     try:
-        return jsonify(generate_with_claude(word))
+        result = generate_with_claude(word)
+
+        # Pitch accent SVG — use reading from Claude's output
+        reading = result.get("sentence_furigana", "") or word
+        # Extract plain reading from furigana format (strip [xxx] brackets)
+        import re
+        plain_reading = re.sub(r'\[.*?\]', '', reading)
+        # Try looking up the word directly first, then fall back to plain reading
+        pitch_html = build_pitch_field(word, plain_reading)
+        result["pitch_accents"] = pitch_html
+        result["has_pitch"] = bool(pitch_html)
+
+        # Audio
+        audio_result = fetch_word_audio(word, plain_reading)
+        if audio_result:
+            filename, audio_bytes = audio_result
+            result["audio_file"] = filename
+            result["audio_b64"] = __import__("base64").b64encode(audio_bytes).decode()
+            result["has_audio"] = True
+        else:
+            result["has_audio"] = False
+
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -134,11 +334,18 @@ def save_word():
     d = request.get_json() or {}
     if not d.get("expression", "").strip():
         return jsonify({"error": "ไม่มีคำศัพท์"}), 400
+
+    audio_data = None
+    if d.get("audio_b64"):
+        import base64
+        audio_data = base64.b64decode(d["audio_b64"])
+
     with get_db() as conn:
         conn.execute("""
             INSERT INTO words
-              (expression, thai_meaning, english_meaning, sentence, sentence_furi, thai_sentence, english_sentence)
-            VALUES (?,?,?,?,?,?,?)
+              (expression, thai_meaning, english_meaning, sentence, sentence_furi,
+               thai_sentence, english_sentence, pitch_accents, audio_file, audio_data)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
         """, (
             d.get("expression", ""),
             d.get("thai_meaning", ""),
@@ -147,6 +354,9 @@ def save_word():
             d.get("sentence_furigana", ""),
             d.get("thai_sentence", ""),
             d.get("english_sentence", ""),
+            d.get("pitch_accents", ""),
+            d.get("audio_file", ""),
+            audio_data,
         ))
     return jsonify({"ok": True})
 
@@ -166,9 +376,23 @@ def export():
         flash("ไม่มีคำศัพท์ใหม่ที่รอ export", "error")
         return redirect(url_for("index"))
 
-    model = make_anki_model()
-    deck  = genanki.Deck(ANKI_DECK_ID, "Nihongo Vocab")
+    model      = make_anki_model()
+    deck       = genanki.Deck(ANKI_DECK_ID, "Nihongo Vocab")
+    tmp_files  = []   # temp audio files to clean up after
+
     for w in words:
+        # Write audio to a temp file so genanki can include it
+        audio_field = ""
+        if w["audio_data"] and w["audio_file"]:
+            tmp = tempfile.NamedTemporaryFile(
+                suffix=".mp3", prefix=w["audio_file"].replace(".mp3", "_"),
+                delete=False
+            )
+            tmp.write(bytes(w["audio_data"]))
+            tmp.close()
+            tmp_files.append((tmp.name, w["audio_file"]))
+            audio_field = f"[sound:{w['audio_file']}]"
+
         deck.add_note(genanki.Note(
             model=model,
             fields=[
@@ -176,9 +400,11 @@ def export():
                 w["sentence_furi"] or "",       # 1  Sentence-furigana-plain
                 w["english_sentence"] or "",    # 2  ❃❃
                 w["expression"] or "",          # 3  Expression
-                "",                             # 4  pitch-accents
+                w["pitch_accents"] or "",       # 4  pitch-accents
                 w["english_meaning"] or "",     # 5  ❃
-                "", "", "", "", "",             # 6-10 Audio/Lesson/freq/CardNo
+                audio_field,                   # 6  Word Audio
+                "",                             # 7  Sentence Audio
+                "", "", "",                     # 8-10 Lesson/freq/CardNo
                 "", "",                         # 11-12 pitch graphs/positions
                 w["thai_meaning"] or "",        # 13 Thai_Meaning
                 w["thai_sentence"] or "",       # 14 Thai_Sentence
@@ -186,7 +412,17 @@ def export():
         ))
 
     out = f"/tmp/nihongo_{int(time.time())}.apkg"
-    genanki.Package(deck).write_to_file(out)
+    pkg = genanki.Package(deck)
+    pkg.media_files = [t[0] for t in tmp_files]
+    pkg.write_to_file(out)
+
+    # Clean up temp audio files
+    for tmp_path, _ in tmp_files:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
     with get_db() as conn:
         conn.execute("UPDATE words SET exported=1 WHERE exported=0")
     return send_file(out, as_attachment=True, download_name="nihongo.apkg")
