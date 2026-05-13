@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import sqlite3
 import json
@@ -60,6 +61,22 @@ def init_db():
 init_db()
 
 
+def _fix_furigana(text: str) -> str:
+    """Add a space before each kanji[reading] group that follows kana/punctuation.
+
+    Anki's furigana filter uses spaces to determine where a kanji group starts.
+    Without a space, preceding kana is mistakenly included in the kanji group.
+    e.g. "は天然[てんねん]" → "は 天然[てんねん]"
+    """
+    # Insert a space between a kana/punctuation character and the start of a kanji group
+    # that is immediately followed by [reading], but only when not already spaced.
+    return re.sub(
+        r'(?<=[^\s一-鿿])(?=[一-鿿]+\[)',
+        ' ',
+        text,
+    )
+
+
 def generate_with_claude(word: str) -> dict:
     client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
     prompt = f"""คุณเป็นผู้เชี่ยวชาญภาษาญี่ปุ่น กรุณา generate ข้อมูลสำหรับคำศัพท์ต่อไปนี้แล้วตอบเป็น JSON เท่านั้น
@@ -71,7 +88,12 @@ JSON fields ที่ต้องการ:
 - thai_meaning: ความหมายภาษาไทย กระชับ 1-3 ความหมาย
 - english_meaning: ความหมายภาษาอังกฤษ กระชับ 1-3 ความหมาย
 - sentence: ประโยคตัวอย่างภาษาญี่ปุ่น ระดับ N3-N4 เป็นธรรมชาติ
-- sentence_furigana: ประโยคเดิม แต่ใส่ furigana แบบ Anki เฉพาะคันจิ เช่น 勉強[べんきょう]する (hiragana/katakana ล้วนไม่ต้องใส่ bracket)
+- sentence_furigana: ประโยคเดิม แต่ใส่ furigana แบบ Anki เฉพาะคันจิ กฎสำคัญ:
+  1. ใส่ [reading] ต่อท้าย kanji group เช่น 勉強[べんきょう]
+  2. ต้องมี space ก่อน kanji group ที่ตามหลัง hiragana/katakana/เครื่องหมาย
+  3. ตัวอย่างที่ถูก: 日本[にほん]は 天然[てんねん] 資源[しげん]に 乏[とぼ]しい 国[くに]です。
+  4. ตัวอย่างที่ผิด: 日本[にほん]は天然[てんねん]資源[しげん]に乏[とぼ]しい国[くに]です。
+  5. hiragana/katakana ล้วนไม่ต้องใส่ bracket
 - thai_sentence: คำแปลประโยคภาษาไทย
 - english_sentence: คำแปลประโยคภาษาอังกฤษ
 
@@ -88,7 +110,10 @@ JSON fields ที่ต้องการ:
         if text.startswith("json"):
             text = text[4:]
         text = text.strip()
-    return json.loads(text)
+    result = json.loads(text)
+    if "sentence_furigana" in result:
+        result["sentence_furigana"] = _fix_furigana(result["sentence_furigana"])
+    return result
 
 
 _QFMT = """\
