@@ -114,6 +114,8 @@ JSON fields ที่ต้องการ:
     result = json.loads(text)
     if "sentence_furigana" in result:
         result["sentence_furigana"] = _fix_furigana(result["sentence_furigana"])
+    if "sentence" in result:
+        result["sentence"] = re.sub(r'\[[^\]]*\]', '', result["sentence"])
     return result
 
 
