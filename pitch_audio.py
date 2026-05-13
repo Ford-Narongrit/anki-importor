@@ -172,8 +172,46 @@ def generate_pitch_svg(reading: str, pitch: int) -> str:
     )
 
 
+_HIGH_SPAN_STYLE = (
+    "display:block;user-select:none;pointer-events:none;"
+    "position:absolute;top:0.1em;left:0;right:0;height:0;"
+    "border-top-width:0.1em;border-top-style:solid;"
+)
+
+
+def _generate_pitch_spans(reading: str, pitch: int) -> str:
+    moras = split_moras(reading)
+    if not moras:
+        return ""
+    parts = []
+    for i, mora in enumerate(moras):
+        if _is_high(i, pitch):
+            indicator = f'<span style="border-color:currentColor;{_HIGH_SPAN_STYLE}"></span>'
+        else:
+            indicator = '<span style="border-color:currentColor;"></span>'
+        parts.append(
+            f'<span style="display:inline-block;position:relative;">'
+            f'<span style="display:inline;">{mora}</span>'
+            f'{indicator}'
+            f'</span>'
+        )
+    return f'<span style="display:inline;">{"".join(parts)}</span>'
+
+
 def build_pitch_field(word: str, reading: str) -> str:
-    """Generate HTML for the pitch-accents Anki field (ol > li > SVG)."""
+    """Inline span pitch display for the pitch-accents Anki field."""
+    pitches = get_pitch_numbers(word, reading)
+    if not pitches:
+        return ""
+    items = "".join(
+        f"<li>{_generate_pitch_spans(reading or word, p)}</li>"
+        for p in pitches[:2]
+    )
+    return f"<ol>{items}</ol>" if items else ""
+
+
+def build_pitch_graphs_field(word: str, reading: str) -> str:
+    """SVG pitch graph for the pitch-accent-graphs Anki field."""
     pitches = get_pitch_numbers(word, reading)
     if not pitches:
         return ""

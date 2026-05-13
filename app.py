@@ -7,7 +7,7 @@ import tempfile
 from flask import Flask, render_template, request, redirect, url_for, send_file, jsonify, flash
 import anthropic
 import genanki
-from pitch_audio import build_pitch_field, fetch_word_audio
+from pitch_audio import build_pitch_field, build_pitch_graphs_field, fetch_word_audio
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "nihongo-dev-secret")
@@ -51,6 +51,7 @@ def init_db():
         existing = {r[1] for r in conn.execute("PRAGMA table_info(words)")}
         for col, defn in [
             ("pitch_accents", "TEXT DEFAULT ''"),
+            ("pitch_graphs",  "TEXT DEFAULT ''"),
             ("audio_file",    "TEXT DEFAULT ''"),
             ("audio_data",    "BLOB"),
         ]:
@@ -334,7 +335,9 @@ def api_generate():
         word_reading = result.get("word_reading", "").strip()
 
         pitch_html = build_pitch_field(word, word_reading)
+        pitch_graphs_html = build_pitch_graphs_field(word, word_reading)
         result["pitch_accents"] = pitch_html
+        result["pitch_graphs"] = pitch_graphs_html
         result["has_pitch"] = bool(pitch_html)
 
         audio_result = fetch_word_audio(word, word_reading)
@@ -367,8 +370,8 @@ def save_word():
         conn.execute("""
             INSERT INTO words
               (expression, thai_meaning, english_meaning, sentence, sentence_furi,
-               thai_sentence, english_sentence, pitch_accents, audio_file, audio_data)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
+               thai_sentence, english_sentence, pitch_accents, pitch_graphs, audio_file, audio_data)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
         """, (
             d.get("expression", ""),
             d.get("thai_meaning", ""),
@@ -378,6 +381,7 @@ def save_word():
             d.get("thai_sentence", ""),
             d.get("english_sentence", ""),
             d.get("pitch_accents", ""),
+            d.get("pitch_graphs", ""),
             d.get("audio_file", ""),
             audio_data,
         ))
@@ -425,7 +429,7 @@ def export():
                 audio_field,                   # 6  Word Audio
                 "",                             # 7  Sentence Audio
                 "", "", "",                     # 8-10 Lesson/freq/CardNo
-                "", "",                         # 11-12 pitch graphs/positions
+                w["pitch_graphs"] or "", "",    # 11-12 pitch graphs/positions
                 w["thai_meaning"] or "",        # 13 Thai_Meaning
                 w["thai_sentence"] or "",       # 14 Thai_Sentence
             ],
